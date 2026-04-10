@@ -3,9 +3,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 import modal
 from pydantic import BaseModel
 
-class ProcessVideoRequest():
+class ProcessVideoRequest(BaseModel):
     s3_key: str
-
 
 image = (modal.Image.from_registry(
     "nvidia/cuda:12.4.0-devel-ubuntu22.04", add_python="3.12")
@@ -26,7 +25,7 @@ mount_path = "/root/.cache/torch"
 
 auth_scheme = HTTPBearer()
 
-@app.cls(gpu="L40S", timeout=900, retries=0, scaledown_window= 20, secrets=[modal.Secret.from_name("biteblast-secrets")], volumes={mount_path: volume})
+@app.cls(gpu="L40S", timeout=900, retries=0, scaledown_window= 20, secrets=[modal.Secret.from_name("biteblast-secret")], volumes={mount_path: volume})
 class BiteBlast:
     @modal.enter()
     def load_model(self):
@@ -37,3 +36,25 @@ class BiteBlast:
     def process_video(self, request: ProcessVideoRequest, token: HTTPAuthorizationCredentials = Depends(auth_scheme)):
         print("Processing video..."+request.s3_key)
         pass
+
+
+@app.local_entrypoint()
+def main():
+    import requests
+
+    biteblast = BiteBlast()
+    url = biteblast.process_video.get_web_url()
+    payload = {
+        "s3_key": "test1/Aliens5min.mp4"
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer 123123"
+
+    }
+    response = requests.post(url, json=payload,
+                              headers=headers)
+    response.raise_for_status()
+    result = response.json()
+    print(result)
+
